@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<title>messenger test</title>
+</head>
+
+<body>
+	<div id="master">
+	</div><!-- /#master -->
+</body>
+
+	<script type="text/javascript">
+		var socket = new WebSocket('ws://mediaserver:12345/echo');
+
+		socket.onmessage = function(event) {
+			console.dir(event);
+		};
+	</script>
+</html>
