@@ -15,7 +15,7 @@ type User struct {
 	send		chan string
 }
 
-func (u *User) reader() {
+func (u *User) reader(r *Room) {
 	for {
 		var message [20]byte
 		n, err := u.websocket.Read(message[:])
@@ -23,7 +23,7 @@ func (u *User) reader() {
 			break
 		}
 
-		h.broadcast <- string(message[:n])
+		r.broadcast <- string(message[:n])
 	}
 
 	u.websocket.Close()
@@ -31,7 +31,7 @@ func (u *User) reader() {
 
 func (u *User) writer() {
 	for message := range u.send {
-		err:= websocket.Message.send(u.websocket, message)
+		err:= websocket.Message.Send(u.websocket, message)
 		if err != nil {
 			break
 		}
@@ -44,30 +44,37 @@ func (u *User) writer() {
 // room
 
 type Room struct {
-	users		map[string]*User
+	id		string
+	users		map[*User]bool
 	broadcast	chan string
-	join		chan *User
-	part		chan *User
+	register	chan *User
+	unregister	chan *User
 }
 
 func (r *Room) run() {
 	for {
 		select {
-		case u:= <-r.join:
-			r.users[u.id] = u
+		case user := <-r.register:
+			fmt.Print("here!")
+			fmt.Printf("%v", user)
+			r.users[user] = true
+		case user := <-r.unregister:
+			delete(r.users, user)
+		case message := <-r.broadcast:
+			fmt.Print("got message!")
+			fmt.Printf("%v", message)
+			fmt.Printf("%v", r)
 
-		case u:= <-r.part:
-			delete(r.users, u.id)
+			for current_user := range r.users {
+				fmt.Printf("%v", current_user)
 
-		case u:= <-r.broadcast:
-			for current_user:= range r.users {
 				select {
-				case current_user.send <- u:
+				case current_user.send <- message:
 
 				default:
 					delete(r.users, current_user)
 					close(current_user.send)
-					go c.ws.Close()
+					go current_user.websocket.Close()
 				}
 			}
 		}
@@ -78,20 +85,45 @@ func (r *Room) run() {
 
 type Hub struct {
 	rooms		map[string]*Room
-	register	chan *Room
-	unregister	chan *Room
 }
 
-
-
-
-
-
-
-
+var h = Hub{ rooms: make(map[string]*Room) }
 
 func EchoServer(ws *websocket.Conn) {
 	io.Copy(ws, ws)
+}
+
+func DoorMan(ws *websocket.Conn) {
+	user := &User{
+		websocket: ws,
+		send: make(chan string, 256),
+	}
+
+	room := h.rooms["room1"]
+	if room == nil {
+		room = &Room{
+			id: "room1",
+			users: make(map[*User]bool),
+			broadcast: make(chan string),
+			register: make(chan *User),
+			unregister: make(chan *User),
+		}
+
+		h.rooms[room.id] = room
+		go room.run()
+	}
+
+	room.register <- user
+	defer func() {
+		fmt.Print("defer!");
+		room.unregister <- user
+	}()
+
+	fmt.Printf("%v", room)
+	fmt.Printf("%v", user)
+
+	go user.writer()
+	user.reader(room)
 }
 
 func Root(c http.ResponseWriter, req *http.Request) {
@@ -99,8 +131,11 @@ func Root(c http.ResponseWriter, req *http.Request) {
 }
 
 func main () {
+	fmt.Printf("%v", h)
 	http.HandleFunc("/", Root)
 	http.Handle("/echo", websocket.Handler(EchoServer))
+	http.Handle("/room1", websocket.Handler(DoorMan))
+
 	fmt.Print("Starting Server...")
 
 	if err := http.ListenAndServe(":12345", nil); err != nil {

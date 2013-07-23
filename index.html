@@ -11,9 +11,14 @@
 </body>
 
 	<script type="text/javascript">
-		var socket = new WebSocket('ws://mediaserver:12345/echo');
+		var socket = new WebSocket('ws://localhost:12345/echo');
+		var socket2 = new WebSocket('ws://localhost:12345/room1');
 
 		socket.onmessage = function(event) {
+			console.dir(event);
+		};
+
+		socket2.onmessage = function(event) {
 			console.dir(event);
 		};
 	</script>
