@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"code.google.com/p/go.net/websocket"
-	"io"
 	"net/http"
+	"regexp"
 )
 
 // user
@@ -55,19 +55,12 @@ func (r *Room) run() {
 	for {
 		select {
 		case user := <-r.register:
-			fmt.Print("here!")
-			fmt.Printf("%v", user)
 			r.users[user] = true
+			user.send <- "welcome"
 		case user := <-r.unregister:
 			delete(r.users, user)
 		case message := <-r.broadcast:
-			fmt.Print("got message!")
-			fmt.Printf("%v", message)
-			fmt.Printf("%v", r)
-
 			for current_user := range r.users {
-				fmt.Printf("%v", current_user)
-
 				select {
 				case current_user.send <- message:
 
@@ -89,9 +82,9 @@ type Hub struct {
 
 var h = Hub{ rooms: make(map[string]*Room) }
 
-func EchoServer(ws *websocket.Conn) {
-	io.Copy(ws, ws)
-}
+var (
+	request_regex, _ = regexp.Compile(`/room/([0-9]+)`)
+)
 
 func DoorMan(ws *websocket.Conn) {
 	user := &User{
@@ -99,10 +92,13 @@ func DoorMan(ws *websocket.Conn) {
 		send: make(chan string, 256),
 	}
 
-	room := h.rooms["room1"]
+	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
+	room_number := path[0][1]
+
+	room := h.rooms[room_number]
 	if room == nil {
 		room = &Room{
-			id: "room1",
+			id: room_number,
 			users: make(map[*User]bool),
 			broadcast: make(chan string),
 			register: make(chan *User),
@@ -113,14 +109,17 @@ func DoorMan(ws *websocket.Conn) {
 		go room.run()
 	}
 
+	fmt.Printf("current rooms: %v\n", h.rooms)
+
 	room.register <- user
 	defer func() {
-		fmt.Print("defer!");
+		fmt.Print("defer, unregistering user!");
 		room.unregister <- user
 	}()
 
-	fmt.Printf("%v", room)
-	fmt.Printf("%v", user)
+	fmt.Printf("room: %v\n", room)
+	fmt.Printf("users: %v\n", room.users)
+	fmt.Printf("current user: %v\n", user)
 
 	go user.writer()
 	user.reader(room)
@@ -131,10 +130,8 @@ func Root(c http.ResponseWriter, req *http.Request) {
 }
 
 func main () {
-	fmt.Printf("%v", h)
 	http.HandleFunc("/", Root)
-	http.Handle("/echo", websocket.Handler(EchoServer))
-	http.Handle("/room1", websocket.Handler(DoorMan))
+	http.Handle("/room/", websocket.Handler(DoorMan))
 
 	fmt.Print("Starting Server...")
 

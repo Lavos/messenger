@@ -3,6 +3,14 @@
 <head>
 	<meta charset="utf-8"/>
 	<title>messenger test</title>
+
+	<script type="text/javascript">
+		(function(){
+			window['CLARITY'] = [];
+			var ns = document.createElement('script'), s = document.getElementsByTagName('script')[0];
+			ns.async = true; ns.type = 'text/javascript'; ns.src = '//lib.spinmedia.com/clarity.min.js'; s.parentNode.insertBefore(ns, s);
+		})();
+	</script>	
 </head>
 
 <body>
@@ -11,15 +19,22 @@
 </body>
 
 	<script type="text/javascript">
-		var socket = new WebSocket('ws://localhost:12345/echo');
-		var socket2 = new WebSocket('ws://localhost:12345/room1');
+		CLARITY.push({
+			use: ['jquery', 'doubleunderscore'],
+			run: function($, __){
+				var room_number = __.getRandomInt(0, 3);
+				var socket2 = new WebSocket('ws://localhost:12345/room/' + room_number);
+				var master = document.getElementById('master');
+				master.innerHTML += room_number;
 
-		socket.onmessage = function(event) {
-			console.dir(event);
-		};
+				socket2.onmessage = function(event) {
+					master.innerHTML += event.data;
+				};
 
-		socket2.onmessage = function(event) {
-			console.dir(event);
-		};
+				$(document).on('click', function(){
+					socket2.send('ABC12345');
+				});
+			}
+		});
 	</script>
 </html>
