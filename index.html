@@ -23,7 +23,7 @@
 			use: ['jquery', 'doubleunderscore'],
 			run: function($, __){
 				var room_number = __.getRandomInt(0, 3);
-				var socket2 = new WebSocket('ws://localhost:12345/room/' + room_number);
+				var socket2 = new WebSocket('ws://10.10.10.7:12345/room/' + room_number);
 				var master = document.getElementById('master');
 				master.innerHTML += room_number;
 

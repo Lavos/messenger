@@ -50,21 +50,19 @@ type Room struct {
 	unregister chan *User
 }
 
-func (r *Room) run() {
+func (r *Room) run(h *Hub) {
 	for {
 		select {
 		case user := <-r.register:
 			r.users[user] = true
 			user.send <- "welcome"
 		case user := <-r.unregister:
+			fmt.Print("Unregister!\n")
+
 			delete(r.users, user)
 
 			if len(r.users) == 0 {
-				close(r.broadcast)
-				close(r.register)
-				close(r.unregister)
-				delete(h.rooms, r.id)
-				return
+				h.unregister <- r
 			}
 		case message := <-r.broadcast:
 			for current_user := range r.users {
@@ -85,10 +83,47 @@ func (r *Room) run() {
 // hub
 
 type Hub struct {
-	rooms map[string]*Room
+	rooms	   map[string]*Room
+	unregister chan *Room
+	join	   chan string
+	booking    chan *Room
 }
 
-var h = Hub{rooms: make(map[string]*Room)}
+func (h *Hub) Run() {
+	for {
+		select {
+		case room := <-h.unregister:
+			delete(h.rooms, room.id)
+			fmt.Printf("%v\n", h.rooms)
+
+		case name := <-h.join:
+			room := h.rooms[name]
+			if room == nil {
+				room = &Room{
+					id:         name,
+					users:      make(map[*User]bool),
+					broadcast:  make(chan string),
+					register:   make(chan *User),
+					unregister: make(chan *User),
+				}
+
+				h.rooms[room.id] = room
+				go room.run(h)
+			}
+
+			fmt.Printf("%v\n", h.rooms)
+			h.booking <-room
+		}
+	}
+}
+
+
+var h = Hub{
+	rooms: make(map[string]*Room),
+	unregister: make(chan *Room),
+	join: make(chan string),
+	booking: make(chan *Room),
+}
 
 var (
 	request_regex, _ = regexp.Compile(`/room/([0-9]+)`)
@@ -103,31 +138,14 @@ func DoorMan(ws *websocket.Conn) {
 	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
 	room_number := path[0][1]
 
-	room := h.rooms[room_number]
-	if room == nil {
-		room = &Room{
-			id:         room_number,
-			users:      make(map[*User]bool),
-			broadcast:  make(chan string),
-			register:   make(chan *User),
-			unregister: make(chan *User),
-		}
-
-		h.rooms[room.id] = room
-		go room.run()
-	}
-
-	fmt.Printf("current rooms: %v\n", h.rooms)
+	h.join <- room_number
+	room := <-h.booking
 
 	room.register <- user
 	defer func() {
 		fmt.Print("defer, unregistering user!\n")
 		room.unregister <- user
 	}()
-
-	fmt.Printf("room: %v\n", room)
-	fmt.Printf("users: %v\n", room.users)
-	fmt.Printf("current user: %v\n", user)
 
 	go user.writer()
 	user.reader(room)
@@ -138,6 +156,7 @@ func Root(c http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	go h.Run()
 	http.HandleFunc("/", Root)
 	http.Handle("/room/", websocket.Handler(DoorMan))
 
@@ -146,4 +165,5 @@ func main() {
 	if err := http.ListenAndServe(":12345", nil); err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}
+
 }
