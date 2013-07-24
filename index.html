@@ -32,7 +32,7 @@
 				};
 
 				$(document).on('click', function(){
-					socket2.send('ABC12345');
+					socket2.send(JSON.stringify({ 'test': 12345 }));
 				});
 			}
 		});

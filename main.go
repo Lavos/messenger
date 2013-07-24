@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"code.google.com/p/go.net/websocket"
+	"fmt"
 	"net/http"
 	"regexp"
 )
@@ -10,16 +10,16 @@ import (
 // user
 
 type User struct {
-	id		string
-	websocket	*websocket.Conn
-	send		chan string
+	id        string
+	websocket *websocket.Conn
+	send      chan string
 }
 
 func (u *User) reader(r *Room) {
 	for {
 		var message [20]byte
 		n, err := u.websocket.Read(message[:])
-		if err != nil  {
+		if err != nil {
 			break
 		}
 
@@ -31,7 +31,7 @@ func (u *User) reader(r *Room) {
 
 func (u *User) writer() {
 	for message := range u.send {
-		err:= websocket.Message.Send(u.websocket, message)
+		err := websocket.Message.Send(u.websocket, message)
 		if err != nil {
 			break
 		}
@@ -40,15 +40,14 @@ func (u *User) writer() {
 	u.websocket.Close()
 }
 
-
 // room
 
 type Room struct {
-	id		string
-	users		map[*User]bool
-	broadcast	chan string
-	register	chan *User
-	unregister	chan *User
+	id         string
+	users      map[*User]bool
+	broadcast  chan string
+	register   chan *User
+	unregister chan *User
 }
 
 func (r *Room) run() {
@@ -59,11 +58,20 @@ func (r *Room) run() {
 			user.send <- "welcome"
 		case user := <-r.unregister:
 			delete(r.users, user)
+
+			if len(r.users) == 0 {
+				close(r.broadcast)
+				close(r.register)
+				close(r.unregister)
+				delete(h.rooms, r.id)
+				return
+			}
 		case message := <-r.broadcast:
 			for current_user := range r.users {
 				select {
 				case current_user.send <- message:
 
+				// if stuck or dead
 				default:
 					delete(r.users, current_user)
 					close(current_user.send)
@@ -77,10 +85,10 @@ func (r *Room) run() {
 // hub
 
 type Hub struct {
-	rooms		map[string]*Room
+	rooms map[string]*Room
 }
 
-var h = Hub{ rooms: make(map[string]*Room) }
+var h = Hub{rooms: make(map[string]*Room)}
 
 var (
 	request_regex, _ = regexp.Compile(`/room/([0-9]+)`)
@@ -89,7 +97,7 @@ var (
 func DoorMan(ws *websocket.Conn) {
 	user := &User{
 		websocket: ws,
-		send: make(chan string, 256),
+		send:      make(chan string, 256),
 	}
 
 	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
@@ -98,10 +106,10 @@ func DoorMan(ws *websocket.Conn) {
 	room := h.rooms[room_number]
 	if room == nil {
 		room = &Room{
-			id: room_number,
-			users: make(map[*User]bool),
-			broadcast: make(chan string),
-			register: make(chan *User),
+			id:         room_number,
+			users:      make(map[*User]bool),
+			broadcast:  make(chan string),
+			register:   make(chan *User),
 			unregister: make(chan *User),
 		}
 
@@ -113,7 +121,7 @@ func DoorMan(ws *websocket.Conn) {
 
 	room.register <- user
 	defer func() {
-		fmt.Print("defer, unregistering user!");
+		fmt.Print("defer, unregistering user!\n")
 		room.unregister <- user
 	}()
 
@@ -129,11 +137,11 @@ func Root(c http.ResponseWriter, req *http.Request) {
 	http.ServeFile(c, req, "index.html")
 }
 
-func main () {
+func main() {
 	http.HandleFunc("/", Root)
 	http.Handle("/room/", websocket.Handler(DoorMan))
 
-	fmt.Print("Starting Server...")
+	fmt.Print("Starting Server...\n")
 
 	if err := http.ListenAndServe(":12345", nil); err != nil {
 		panic("ListenAndServe: " + err.Error())
