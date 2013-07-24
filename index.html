@@ -15,24 +15,60 @@
 
 <body>
 	<div id="master">
+		<fieldset>
+			<legend>Websocket</legend>
+
+			<div class="actions">
+				<p><input type="text" name="room_name" data-input="join"/><button data-action="join">Join Channel</button></p>
+				<p><input type="text" name="message" data-input="send"/><button data-action="send">Send Message</button></p>
+			</div>
+
+			<dl class="log">
+
+			</dl><!-- /.log -->
+		</fieldset>
 	</div><!-- /#master -->
+
+	<script type="text/html" id="message_template">
+		<dt></dt>
+		<dd>[!= dt.data !]</dd>
+	</script>
 </body>
 
 	<script type="text/javascript">
 		CLARITY.push({
 			use: ['jquery', 'doubleunderscore'],
 			run: function($, __){
-				var room_number = __.getRandomInt(0, 3);
-				var socket2 = new WebSocket('ws://localhost:12345/room/' + room_number);
-				var master = document.getElementById('master');
-				master.innerHTML += room_number;
+				var template = __.template(document.getElementById('message_template').innerHTML);
+				var socket = null;
+				var $log = $('.log');
 
-				socket2.onmessage = function(event) {
-					master.innerHTML += event.data;
-				};
+				$(document).on('click', '[data-action="join"]', function(e){
+					e.preventDefault();
 
-				$(document).on('click', function(){
-					socket2.send(JSON.stringify({ 'test': 12345 }));
+					var $button = $(this);
+					var $input = $('[data-input="' + $button.data('action') + '"]');
+
+					if (socket) {
+						socket2.close();
+					};
+
+					socket = new Websocket('ws://localhost:12345/room/' + $input.val());
+
+					socket.onmessage = function(event) {
+						$log.append(template({ data: event.data }));
+					};
+				});
+
+				$(document).on('click', '[data-action="send"]', function(e){
+					e.preventDefault();
+
+					var $button = $(this);
+					var $input = $('[data-input="' + $button.data('action') + '"]');
+
+					if (socket) {
+						socket.send($input.val());
+					}
 				});
 			}
 		});
