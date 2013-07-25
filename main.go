@@ -5,25 +5,47 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	// "encoding/json"
 )
 
 // user
 
+const (
+	TYPE_STATUS = "status"
+	TYPE_MESSAGE = "message"
+)
+
+type Message struct {
+	MessageType string
+	Status Status
+	Text string
+}
+
+type Status struct {
+	Users int
+}
+
 type User struct {
 	id        string
 	websocket *websocket.Conn
-	send      chan string
+	send      chan Message
 }
 
 func (u *User) reader(r *Room) {
 	for {
-		var message [20]byte
-		n, err := u.websocket.Read(message[:])
+		var content string
+		err := websocket.Message.Receive(u.websocket, &content)
+
 		if err != nil {
-			break
+			return
 		}
 
-		r.broadcast <- string(message[:n])
+		m := Message{
+			MessageType: TYPE_MESSAGE,
+			Text: content,
+		}
+
+		r.broadcast <- m
 	}
 
 	u.websocket.Close()
@@ -31,7 +53,7 @@ func (u *User) reader(r *Room) {
 
 func (u *User) writer() {
 	for message := range u.send {
-		err := websocket.Message.Send(u.websocket, message)
+		err := websocket.JSON.Send(u.websocket, message)
 		if err != nil {
 			break
 		}
@@ -45,7 +67,7 @@ func (u *User) writer() {
 type Room struct {
 	id         string
 	users      map[*User]bool
-	broadcast  chan string
+	broadcast  chan Message
 	register   chan *User
 	unregister chan *User
 }
@@ -55,13 +77,24 @@ func (r *Room) run(h *Hub) {
 		select {
 		case user := <-r.register:
 			r.users[user] = true
-			user.send <- "welcome"
+
+			m := Message{
+				MessageType: TYPE_STATUS,
+				Status: Status{
+					Users: len(r.users),
+				},
+			}
+
+			user.send <- m
+			fmt.Printf("current users: %v\n", r.users)
 		case user := <-r.unregister:
 			fmt.Print("Unregister!\n")
-
 			delete(r.users, user)
+			close(user.send)
+			fmt.Printf("current users: %v\n", r.users)
 
 			if len(r.users) == 0 {
+				fmt.Print("I'm now empty, unregistering.\n")
 				h.unregister <- r
 			}
 		case message := <-r.broadcast:
@@ -85,7 +118,7 @@ func (r *Room) run(h *Hub) {
 type Hub struct {
 	rooms	   map[string]*Room
 	unregister chan *Room
-	join	   chan string
+	join	   chan *RoomRequest
 	booking    chan *Room
 }
 
@@ -94,15 +127,15 @@ func (h *Hub) Run() {
 		select {
 		case room := <-h.unregister:
 			delete(h.rooms, room.id)
-			fmt.Printf("%v\n", h.rooms)
+			fmt.Printf("current rooms: %v\n", h.rooms)
 
-		case name := <-h.join:
-			room := h.rooms[name]
+		case request := <-h.join:
+			room := h.rooms[request.name]
 			if room == nil {
 				room = &Room{
-					id:         name,
+					id:         request.name,
 					users:      make(map[*User]bool),
-					broadcast:  make(chan string),
+					broadcast:  make(chan Message),
 					register:   make(chan *User),
 					unregister: make(chan *User),
 				}
@@ -111,8 +144,8 @@ func (h *Hub) Run() {
 				go room.run(h)
 			}
 
-			fmt.Printf("%v\n", h.rooms)
-			h.booking <-room
+			fmt.Printf("current rooms: %v\n", h.rooms)
+			request.booking <-room
 		}
 	}
 }
@@ -121,8 +154,13 @@ func (h *Hub) Run() {
 var h = Hub{
 	rooms: make(map[string]*Room),
 	unregister: make(chan *Room),
-	join: make(chan string),
+	join: make(chan *RoomRequest),
 	booking: make(chan *Room),
+}
+
+type RoomRequest struct {
+	name	string
+	booking	chan *Room
 }
 
 var (
@@ -130,16 +168,26 @@ var (
 )
 
 func DoorMan(ws *websocket.Conn) {
-	user := &User{
-		websocket: ws,
-		send:      make(chan string, 256),
+	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
+
+	if path == nil {
+		return
 	}
 
-	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
 	room_number := path[0][1]
 
-	h.join <- room_number
-	room := <-h.booking
+	user := &User{
+		websocket: ws,
+		send:      make(chan Message),
+	}
+
+	request := &RoomRequest{
+		name: room_number,
+		booking: make(chan *Room),
+	}
+
+	h.join <- request
+	room := <-request.booking
 
 	room.register <- user
 	defer func() {
@@ -148,7 +196,7 @@ func DoorMan(ws *websocket.Conn) {
 	}()
 
 	go user.writer()
-	user.reader(room)
+	user.reader(room) // blocks until websocket is closed
 }
 
 func Root(c http.ResponseWriter, req *http.Request) {
@@ -160,7 +208,7 @@ func main() {
 	http.HandleFunc("/", Root)
 	http.Handle("/room/", websocket.Handler(DoorMan))
 
-	fmt.Print("Starting Server...\n")
+	fmt.Print("Started Server.\n")
 
 	if err := http.ListenAndServe(":12345", nil); err != nil {
 		panic("ListenAndServe: " + err.Error())

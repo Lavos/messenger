@@ -50,12 +50,13 @@
 					var $input = $('[data-input="' + $button.data('action') + '"]');
 
 					if (socket) {
-						socket2.close();
+						socket.close();
 					};
 
-					socket = new Websocket('ws://localhost:12345/room/' + $input.val());
+					socket = new WebSocket('ws://localhost:12345/room/' + $input.val());
 
 					socket.onmessage = function(event) {
+						console.dir(event);
 						$log.append(template({ data: event.data }));
 					};
 				});
