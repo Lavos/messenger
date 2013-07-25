@@ -16,13 +16,13 @@ const (
 )
 
 type Message struct {
-	MessageType string
-	Status Status
-	Text string
+	MessageType string `json:"messagetype"`
+	Status Status `json:"status,omitempty"`
+	Text string `json:"text,omitempty"`
 }
 
 type Status struct {
-	Users int
+	Users int `json:"users,omitempty"`
 }
 
 type User struct {
