@@ -12,7 +12,7 @@ import (
 
 const (
 	TYPE_STATUS = "status"
-	TYPE_MESSAGE = "message"
+	TYPE_TEXT = "text"
 )
 
 type Message struct {
@@ -41,7 +41,7 @@ func (u *User) reader(r *Room) {
 		}
 
 		m := Message{
-			MessageType: TYPE_MESSAGE,
+			MessageType: TYPE_TEXT,
 			Text: content,
 		}
 
@@ -85,7 +85,7 @@ func (r *Room) run(h *Hub) {
 				},
 			}
 
-			user.send <- m
+			go func() { r.broadcast <- m }()
 			fmt.Printf("current users: %v\n", r.users)
 		case user := <-r.unregister:
 			fmt.Print("Unregister!\n")
@@ -96,6 +96,16 @@ func (r *Room) run(h *Hub) {
 			if len(r.users) == 0 {
 				fmt.Print("I'm now empty, unregistering.\n")
 				h.unregister <- r
+			} else {
+
+				m := Message{
+					MessageType: TYPE_STATUS,
+					Status: Status{
+						Users: len(r.users),
+					},
+				}
+
+				go func() { r.broadcast <- m }()
 			}
 		case message := <-r.broadcast:
 			for current_user := range r.users {
@@ -119,7 +129,6 @@ type Hub struct {
 	rooms	   map[string]*Room
 	unregister chan *Room
 	join	   chan *RoomRequest
-	booking    chan *Room
 }
 
 func (h *Hub) Run() {
@@ -155,7 +164,6 @@ var h = Hub{
 	rooms: make(map[string]*Room),
 	unregister: make(chan *Room),
 	join: make(chan *RoomRequest),
-	booking: make(chan *Room),
 }
 
 type RoomRequest struct {
