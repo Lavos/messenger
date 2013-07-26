@@ -4,8 +4,6 @@ import (
 	"code.google.com/p/go.net/websocket"
 	"fmt"
 	"net/http"
-	"regexp"
-	// "encoding/json"
 )
 
 // user
@@ -171,18 +169,13 @@ type RoomRequest struct {
 	booking	chan *Room
 }
 
-var (
-	request_regex, _ = regexp.Compile(`/room/([0-9]+)`)
-)
-
 func DoorMan(ws *websocket.Conn) {
-	path := request_regex.FindAllStringSubmatch(ws.Request().URL.Path, -1)
+	ws.Request().ParseForm()
+	room_name := ws.Request().Form.Get("name")
 
-	if path == nil {
+	if len(room_name) == 0 {
 		return
 	}
-
-	room_number := path[0][1]
 
 	user := &User{
 		websocket: ws,
@@ -190,7 +183,7 @@ func DoorMan(ws *websocket.Conn) {
 	}
 
 	request := &RoomRequest{
-		name: room_number,
+		name: room_name,
 		booking: make(chan *Room),
 	}
 
@@ -214,7 +207,7 @@ func Root(c http.ResponseWriter, req *http.Request) {
 func main() {
 	go h.Run()
 	http.HandleFunc("/", Root)
-	http.Handle("/room/", websocket.Handler(DoorMan))
+	http.Handle("/room", websocket.Handler(DoorMan))
 
 	fmt.Print("Started Server.\n")
 
