@@ -17,6 +17,7 @@ type Message struct {
 	MessageType string `json:"messagetype"`
 	Status Status `json:"status,omitempty"`
 	Text string `json:"text,omitempty"`
+	User string `json:"user,omitempty"`
 }
 
 type Status struct {
@@ -27,6 +28,7 @@ type User struct {
 	id        string
 	websocket *websocket.Conn
 	send      chan Message
+	name	  string
 }
 
 func (u *User) reader(r *Room) {
@@ -35,12 +37,13 @@ func (u *User) reader(r *Room) {
 		err := websocket.Message.Receive(u.websocket, &content)
 
 		if err != nil {
-			return
+			continue
 		}
 
 		m := Message{
 			MessageType: TYPE_TEXT,
 			Text: content,
+			User: u.name,
 		}
 
 		r.broadcast <- m
@@ -76,34 +79,34 @@ func (r *Room) run(h *Hub) {
 		case user := <-r.register:
 			r.users[user] = true
 
-			m := Message{
+			/*m := Message{
 				MessageType: TYPE_STATUS,
 				Status: Status{
 					Users: len(r.users),
 				},
 			}
 
-			go func() { r.broadcast <- m }()
-			fmt.Printf("current users: %v\n", r.users)
+			go func() { r.broadcast <- m }()*/
+			 fmt.Printf("current users: %v\n", len(r.users))
 		case user := <-r.unregister:
-			fmt.Print("Unregister!\n")
+			// fmt.Print("Unregister!\n")
 			delete(r.users, user)
 			close(user.send)
-			fmt.Printf("current users: %v\n", r.users)
+			fmt.Printf("current users: %v\n", len(r.users))
 
 			if len(r.users) == 0 {
-				fmt.Print("I'm now empty, unregistering.\n")
+				// fmt.Print("I'm now empty, unregistering.\n")
 				h.unregister <- r
 			} else {
 
-				m := Message{
+				/*m := Message{
 					MessageType: TYPE_STATUS,
 					Status: Status{
 						Users: len(r.users),
 					},
 				}
 
-				go func() { r.broadcast <- m }()
+				go func() { r.broadcast <- m }()*/
 			}
 		case message := <-r.broadcast:
 			for current_user := range r.users {
@@ -134,7 +137,7 @@ func (h *Hub) Run() {
 		select {
 		case room := <-h.unregister:
 			delete(h.rooms, room.id)
-			fmt.Printf("current rooms: %v\n", h.rooms)
+			// fmt.Printf("current rooms: %v\n", h.rooms)
 
 		case request := <-h.join:
 			room := h.rooms[request.name]
@@ -151,7 +154,7 @@ func (h *Hub) Run() {
 				go room.run(h)
 			}
 
-			fmt.Printf("current rooms: %v\n", h.rooms)
+			// fmt.Printf("current rooms: %v\n", h.rooms)
 			request.booking <-room
 		}
 	}
@@ -172,6 +175,7 @@ type RoomRequest struct {
 func DoorMan(ws *websocket.Conn) {
 	ws.Request().ParseForm()
 	room_name := ws.Request().Form.Get("name")
+	user_name := ws.Request().Form.Get("user_name")
 
 	if len(room_name) == 0 {
 		return
@@ -180,6 +184,7 @@ func DoorMan(ws *websocket.Conn) {
 	user := &User{
 		websocket: ws,
 		send:      make(chan Message),
+		name: user_name,
 	}
 
 	request := &RoomRequest{
@@ -192,7 +197,7 @@ func DoorMan(ws *websocket.Conn) {
 
 	room.register <- user
 	defer func() {
-		fmt.Print("defer, unregistering user!\n")
+		// fmt.Print("defer, unregistering user!\n")
 		room.unregister <- user
 	}()
 
