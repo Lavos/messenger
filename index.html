@@ -11,66 +11,198 @@
 			ns.async = true; ns.type = 'text/javascript'; ns.src = '//lib.spinmedia.com/clarity.min.js'; s.parentNode.insertBefore(ns, s);
 		})();
 	</script>	
+
+	<script type="text/javascript">
+		CLARITY.push({
+			use: ['doubleunderscore'],
+			run: function(__){
+			}
+		});
+	</script>
 </head>
 
 <body>
 	<div id="master">
 		<fieldset>
-			<legend>Websocket</legend>
-
-			<div class="actions">
-				<p><input type="text" name="room_name" data-input="join"/><button data-action="join">Join Channel</button></p>
-				<p><input type="text" name="message" data-input="send"/><button data-action="send">Send Message</button></p>
-			</div>
+			<legend>Websocket Connections</legend>
+			<p><button data-action="connect">Connect Websockets</button> <button data-action="disconnect">Disconnect Websockets"</button></p>
 
 			<dl class="log">
 
 			</dl><!-- /.log -->
 		</fieldset>
 	</div><!-- /#master -->
-
-	<script type="text/html" id="message_template">
-		<dt></dt>
-		<dd>[!= dt.data !]</dd>
-	</script>
 </body>
 
 	<script type="text/javascript">
 		CLARITY.push({
 			use: ['jquery', 'doubleunderscore'],
 			run: function($, __){
-				var template = __.template(document.getElementById('message_template').innerHTML);
-				var socket = null;
+				var MessengerClient = function MessengerClient (params) {
+					var self = this;
+
+					var defaults = {
+						url: '',
+						params: {},
+						reconnect: true,
+						retry_delay: 5000,
+						retry_attempts: 20
+					};
+
+					__.extend(self.options = {}, defaults, params);
+
+					self.socket = null;
+					self.fatal = false;
+					self.attempts = 0;
+					self.timer = null;
+					self.state = 'closed';
+				};
+
+				__.augment(MessengerClient, __.PubSubPattern);
+				MessengerClient.global_name = 'messenger_client';
+
+				MessengerClient.prototype.open = function open () {
+					var self = this;
+
+					if (self.state === 'open') {
+						return;
+					};
+
+					if (self.timer) {
+						clearTimeout(self.timer);
+					};
+
+					if (!(self.socket instanceof WebSocket)) {
+						self.socket = new WebSocket(__.sprintf("%s%s", self.options.url, __.toQueryParams(self.options.params)));
+					};
+
+					self.socket.onopen = function(e){
+						self.state = 'open';
+						self.fatal = false;
+						self.attempts = 0;
+
+						self.fire('open', e);
+					};
+
+					self.socket.onclose = function(e){
+						self.state = 'closed';
+						self.fire('close', e);
+						self.socket = null;
+
+						if (self.options.reconnect && !self.fatal) {
+							if (self.attempts >= self.options.retry_attempts) {
+								return;
+							};
+
+							if (!self.timer) {
+								self.attempts++;
+								self.timer = setTimeout(function(){ self.timer = null; self.open(); }, self.options.retry_delay);
+							};
+						};
+					};
+
+					self.socket.onerror = function(e){
+						self.state = 'closed';
+						self.fire('error', e);
+					};
+
+					self.socket.onmessage = function(e){
+						self.fire('message', e);
+					
+						var data = null;
+
+						try {
+							var data = JSON.parse(e.data);
+						} catch (e) {
+							return;
+						};
+
+						if (data) {
+							switch (data.messagetype) {
+							case 'status':
+								self.fire('status', data.status);
+							break;
+
+							case 'text':
+								self.fire('text', data.text, data.user);
+							break;
+
+							};
+						};
+					};
+				};
+				
+				MessengerClient.prototype.close = function close (fatal) {
+					var self = this;
+
+					if (fatal) {
+						self.fatal = fatal;
+					};
+
+					self.socket.close(1000, 'connection reset by peer.');
+				};
+
+				MessengerClient.prototype.send = function send (message) {
+					var self = this;
+
+					self.socket.send(message);
+					self.fire('send', message);
+				};
+
+
+
+
 				var $log = $('.log');
+				var clients = [];
 
-				$(document).on('click', '[data-action="join"]', function(e){
+				$(document).on('click', '[data-action="connect"]', function(e){
 					e.preventDefault();
 
-					var $button = $(this);
-					var $input = $('[data-input="' + $button.data('action') + '"]');
-
-					if (socket) {
-						socket.close();
-					};
-
-					socket = new WebSocket('ws://localhost:12345/room/' + $input.val());
-
-					socket.onmessage = function(event) {
-						console.dir(event);
-						$log.append(template({ data: event.data }));
-					};
+					connect();	
 				});
 
-				$(document).on('click', '[data-action="send"]', function(e){
+				$(document).on('click', '[data-action="disconnect"]', function(e){
 					e.preventDefault();
 
-					var $button = $(this);
-					var $input = $('[data-input="' + $button.data('action') + '"]');
-
-					if (socket) {
-						socket.send($input.val());
-					}
+					disconnect();	
 				});
+
+		
+
+				function connect () {
+					var counter = 0, limit = 10;
+
+					while (counter < limit) {
+						var mc = new MessengerClient({
+							url: 'ws://10.10.10.7:12345/room',
+							params: {
+								name: 'abc',
+								user_name: 'bananas'
+							},
+							reconnect: false
+						});
+
+						mc.on('message', function(){
+							console.dir(arguments);
+						});
+
+						mc.open();
+	
+						clients.push(mc);
+						counter++;
+					};
+
+					console.dir(clients);
+				};
+
+				function disconnect () {
+					var counter = clients.length;
+					while (counter--) {
+						clients[counter].close(true);
+					};
+
+					clients = [];
+				};
 			}
 		});
 	</script>

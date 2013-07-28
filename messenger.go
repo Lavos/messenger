@@ -28,16 +28,49 @@ type User struct {
 	id        string
 	websocket *websocket.Conn
 	send      chan Message
+	read	  chan Message
+	join	  chan *Room
+	die	  chan bool
 	name	  string
+	room	  *Room
 }
 
-func (u *User) reader(r *Room) {
+func (u *User) run() {
+	go u.reader()
+
+	for {
+		select {
+
+		case room := <-u.join:
+			u.room = room
+			u.room.register <- u
+
+		case <-u.die:
+			fmt.Print("DIE!\n")
+			u.room.unregister <- u
+			break
+
+		case message := <-u.read:
+			u.room.broadcast <- message
+
+		case message := <-u.send:
+			err := websocket.JSON.Send(u.websocket, message)
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	u.websocket.Close()
+}
+
+func (u *User) reader() {
 	for {
 		var content string
 		err := websocket.Message.Receive(u.websocket, &content)
 
 		if err != nil {
-			continue
+			break
 		}
 
 		m := Message{
@@ -46,20 +79,10 @@ func (u *User) reader(r *Room) {
 			User: u.name,
 		}
 
-		r.broadcast <- m
+		u.read <- m
 	}
 
-	u.websocket.Close()
-}
-
-func (u *User) writer() {
-	for message := range u.send {
-		err := websocket.JSON.Send(u.websocket, message)
-		if err != nil {
-			break
-		}
-	}
-
+	u.die <- true
 	u.websocket.Close()
 }
 
@@ -79,47 +102,44 @@ func (r *Room) run(h *Hub) {
 		case user := <-r.register:
 			r.users[user] = true
 
-			/*m := Message{
+			m := Message{
 				MessageType: TYPE_STATUS,
 				Status: Status{
 					Users: len(r.users),
 				},
 			}
 
-			go func() { r.broadcast <- m }()*/
-			 fmt.Printf("current users: %v\n", len(r.users))
+			r.SendToUsers(m)
+			fmt.Printf("current users: %v\n", len(r.users))
 		case user := <-r.unregister:
 			// fmt.Print("Unregister!\n")
 			delete(r.users, user)
-			close(user.send)
 			fmt.Printf("current users: %v\n", len(r.users))
 
 			if len(r.users) == 0 {
-				// fmt.Print("I'm now empty, unregistering.\n")
+				fmt.Print("I'm now empty, unregistering.\n")
 				h.unregister <- r
 			} else {
-
-				/*m := Message{
+				m := Message{
 					MessageType: TYPE_STATUS,
 					Status: Status{
 						Users: len(r.users),
 					},
 				}
 
-				go func() { r.broadcast <- m }()*/
+				r.SendToUsers(m)
 			}
 		case message := <-r.broadcast:
-			for current_user := range r.users {
-				select {
-				case current_user.send <- message:
+			r.SendToUsers(message)
+		}
+	}
+}
 
-				// if stuck or dead
-				default:
-					delete(r.users, current_user)
-					close(current_user.send)
-					go current_user.websocket.Close()
-				}
-			}
+func (r *Room) SendToUsers(m Message) {
+	for current_user := range r.users {
+		select {
+		case current_user.send <- m:
+		default:
 		}
 	}
 }
@@ -155,7 +175,7 @@ func (h *Hub) Run() {
 			}
 
 			// fmt.Printf("current rooms: %v\n", h.rooms)
-			request.booking <-room
+			request.booking <- room
 		}
 	}
 }
@@ -184,25 +204,20 @@ func DoorMan(ws *websocket.Conn) {
 	user := &User{
 		websocket: ws,
 		send:      make(chan Message),
+		read:      make(chan Message),
+		die:	   make(chan bool),
+		join:      make(chan *Room),
 		name: user_name,
 	}
 
 	request := &RoomRequest{
 		name: room_name,
-		booking: make(chan *Room),
+		booking: user.join,
 	}
 
 	h.join <- request
-	room := <-request.booking
 
-	room.register <- user
-	defer func() {
-		// fmt.Print("defer, unregistering user!\n")
-		room.unregister <- user
-	}()
-
-	go user.writer()
-	user.reader(room) // blocks until websocket is closed
+	user.run() // blocks until websocket is closed
 }
 
 func Root(c http.ResponseWriter, req *http.Request) {
