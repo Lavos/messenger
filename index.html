@@ -11,25 +11,23 @@
 			ns.async = true; ns.type = 'text/javascript'; ns.src = '//lib.spinmedia.com/clarity.min.js'; s.parentNode.insertBefore(ns, s);
 		})();
 	</script>	
-
-	<script type="text/javascript">
-		CLARITY.push({
-			use: ['doubleunderscore'],
-			run: function(__){
-			}
-		});
-	</script>
 </head>
 
 <body>
 	<div id="master">
 		<fieldset>
 			<legend>Websocket Connections</legend>
-			<p><button data-action="connect">Connect Websockets</button> <button data-action="disconnect">Disconnect Websockets"</button></p>
+			<p>
+				Room Name <input type="text" data-input="room_name" value="abc"/>
+				User Name <input type="text" data-input="user_name" value="bananas"/>
+				<button data-action="connect">Connect Websockets</button>
+				<button data-action="disconnect">Disconnect Websockets</button>
+				<button data-action="message">Send Message</button>
+			</p>
 
-			<dl class="log">
+			<dl id="log">
 
-			</dl><!-- /.log -->
+			</dl><!-- /#log -->
 		</fieldset>
 	</div><!-- /#master -->
 </body>
@@ -150,9 +148,9 @@
 				};
 
 
-
-
-				var $log = $('.log');
+				var log = document.getElementById('log');
+				var $room_name = $('[data-input="room_name"]');
+				var $user_name = $('[data-input="user_name"]');
 				var clients = [];
 
 				$(document).on('click', '[data-action="connect"]', function(e){
@@ -167,23 +165,29 @@
 					disconnect();	
 				});
 
-		
+				$(document).on('click', '[data-action="message"]', function(e){
+					e.preventDefault();
 
+					var random_client = __.getRandomItem(clients);
+					random_client.send('testing message');
+				});
+
+		
 				function connect () {
-					var counter = 0, limit = 10;
+					var counter = 0, limit = 1;
 
 					while (counter < limit) {
 						var mc = new MessengerClient({
-							url: 'ws://10.10.10.7:12345/room',
+							url: 'ws://sb-129.net:12345/room',
 							params: {
-								name: 'abc',
-								user_name: 'bananas'
+								name: $room_name.val() || 'blank',
+								user_name: $user_name.val() || 'bananas'
 							},
 							reconnect: false
 						});
 
-						mc.on('message', function(){
-							console.dir(arguments);
+						mc.on('message', function(message){
+							log.innerHTML = log.innerHTML + __.sprintf('<p>%s</p>', message.data);
 						});
 
 						mc.open();
@@ -192,7 +196,7 @@
 						counter++;
 					};
 
-					console.dir(clients);
+					log.innerHTML = log.innerHTML + __.sprintf('<p><em>%s</em></p>', clients.length);
 				};
 
 				function disconnect () {
