@@ -111,12 +111,11 @@ func (r *Room) run(h *Hub) {
 			r.SendStatus()
 		case user := <-r.unregister:
 			delete(r.users, user)
+			r.SendStatus()
 
 			if r.autoclose && len(r.users) == 0 {
 				log.Printf("[%v] I'm now empty, unregistering.\n", r.id)
 				h.unregister <- r
-			} else {
-				r.SendStatus()
 			}
 		case message := <-r.broadcast:
 			r.SendToUsers(message)
