@@ -168,7 +168,12 @@ func (r *Room) SendStatus() {
 
 func (r *Room) SendToUsers(m Message) {
 	for current_user := range r.users {
-		current_user.send <- m
+		select {
+			case current_user.send <- m:
+			default:
+				log.Printf("[%v] user stuck, sending die signal.\n", r.id)
+				go func() { current_user.die <- true }()
+		}
 	}
 }
 
@@ -263,15 +268,10 @@ func DoorMan(ws *websocket.Conn) {
 	log.Print("DoorMan close")
 }
 
-func Root(c http.ResponseWriter, req *http.Request) {
-	http.ServeFile(c, req, "index.html")
-}
-
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	go h.Run()
-	http.HandleFunc("/", Root)
 	http.Handle("/room", websocket.Handler(DoorMan))
 
 	log.Print("Started Server.")
