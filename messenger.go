@@ -1,24 +1,30 @@
 package main
 
 import (
-	"code.google.com/p/go.net/websocket"
 	"log"
 	"net/http"
 	"runtime"
 	"time"
+
+	"code.google.com/p/go.net/websocket"
+	// "code.google.com/p/go-sqlite/go1/sqlite3"
 )
 
 const (
 	TYPE_STATUS = "status"
 	TYPE_TEXT   = "text"
+	TYPE_EVENT  = "event"
 )
 
 type Message struct {
-	MessageType string   `json:"messagetype"`
-	UserList    []string `json:"user_list,omitempty"`
-	RoomName    string   `json:"room_name,omitempty"`
-	Text        string   `json:"text,omitempty"`
-	User        string   `json:"user,omitempty"`
+	MessageType string      `json:"message_type"`
+	UserList    []string    `json:"user_list,omitempty"`
+	RoomName    string      `json:"room_name,omitempty"`
+	Text        string      `json:"text,omitempty"`
+	Blob        string      `json:"blob,omitempty"`
+	User        string      `json:"user,omitempty"`
+	EventName   string      `json:"event_name,omitempty"`
+	EventParams interface{} `json:"event_params,omitempty"`
 }
 
 // User
@@ -35,8 +41,8 @@ type User struct {
 	room      *Room
 }
 
-func (u *User) run() {
-	go u.reader()
+func (u *User) Run() {
+	go u.Reader()
 
 	defer log.Print("user run close")
 	defer u.websocket.Close()
@@ -51,6 +57,7 @@ func (u *User) run() {
 		case <-u.die:
 			log.Print("user die.")
 			u.room.unregister <- u
+			log.Print("user unregister from die.")
 			return
 
 		case message := <-u.read:
@@ -67,27 +74,22 @@ func (u *User) run() {
 	}
 }
 
-func (u *User) reader() {
+func (u *User) Reader() {
 	for {
-		var content string
-		err := websocket.Message.Receive(u.websocket, &content)
+		var m Message
+		err := websocket.JSON.Receive(u.websocket, &m)
 
 		if err != nil {
+			log.Printf("[%v] got a misformed JSON message from browser, or websocket close.", u.name)
 			break
-		}
-
-		m := Message{
-			MessageType: TYPE_TEXT,
-			Text:        content,
-			User:        u.name,
 		}
 
 		u.read <- m
 	}
 
 	u.die <- true
-	u.websocket.Close()
 	log.Print("user read close")
+	u.websocket.Close()
 }
 
 // room
@@ -103,7 +105,9 @@ type Room struct {
 	autoclose   bool
 }
 
-func (r *Room) run(h *Hub) {
+func (r *Room) Run(h *Hub) {
+	defer log.Printf("[%v] Room run close.", r.id)
+
 	for {
 		select {
 		case user := <-r.register:
@@ -116,6 +120,7 @@ func (r *Room) run(h *Hub) {
 			if r.autoclose && len(r.users) == 0 {
 				log.Printf("[%v] I'm now empty, unregistering.\n", r.id)
 				h.unregister <- r
+				return
 			}
 		case message := <-r.broadcast:
 			r.SendToUsers(message)
@@ -130,8 +135,6 @@ func (r *Room) run(h *Hub) {
 			returnchan <- m
 		}
 	}
-
-	log.Printf("Room %s close.", r.id)
 }
 
 func (r *Room) GetUserList() []string {
@@ -169,10 +172,8 @@ func (r *Room) SendStatus() {
 func (r *Room) SendToUsers(m Message) {
 	for current_user := range r.users {
 		select {
-			case current_user.send <- m:
-			default:
-				log.Printf("[%v] user stuck, sending die signal.\n", r.id)
-				go func() { current_user.die <- true }()
+		case current_user.send <- m:
+		default:
 		}
 	}
 }
@@ -231,7 +232,7 @@ func (h *Hub) CreateRoom(name string, autoclose bool) *Room {
 	log.Printf("[hub] created room: %v", room.id)
 
 	h.rooms[room.id] = room
-	go room.run(h)
+	go room.Run(h)
 	return room
 }
 
@@ -263,7 +264,7 @@ func DoorMan(ws *websocket.Conn) {
 
 	h.join <- user
 
-	user.run() // blocks until websocket is closed
+	user.Run() // blocks until websocket is closed
 
 	log.Print("DoorMan close")
 }
@@ -275,6 +276,13 @@ func main() {
 	http.Handle("/room", websocket.Handler(DoorMan))
 
 	log.Print("Started Server.")
+
+	go func() {
+		c := time.Tick(5 * time.Second)
+		for now := range c {
+			log.Printf("- %v - go routines: %v", now, runtime.NumGoroutine())
+		}
+	}()
 
 	if err := http.ListenAndServe(":12345", nil); err != nil {
 		panic("ListenAndServe: " + err.Error())
