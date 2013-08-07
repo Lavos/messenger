@@ -17,14 +17,8 @@ const (
 )
 
 type Message struct {
-	MessageType string      `json:"message_type"`
-	UserList    []string    `json:"user_list,omitempty"`
-	RoomName    string      `json:"room_name,omitempty"`
-	Text        string      `json:"text,omitempty"`
-	Blob        string      `json:"blob,omitempty"`
-	User        string      `json:"user,omitempty"`
-	EventName   string      `json:"event_name,omitempty"`
-	EventParams interface{} `json:"event_params,omitempty"`
+	EventName   string `json:"event_name,omitempty"`
+	Data	    map[string]interface{} `json:"data,omitempty"`
 }
 
 // User
@@ -125,15 +119,21 @@ func (r *Room) Run(h *Hub) {
 		case message := <-r.broadcast:
 			r.SendToUsers(message)
 		case returnchan := <-r.status:
-			m := Message{
-				MessageType: TYPE_STATUS,
-				UserList:    r.GetUserList(),
-				RoomName:    r.id,
-			}
-
+			m := r.BuildStatusMessage()
 			log.Printf("requested status: %v", m)
 			returnchan <- m
 		}
+	}
+}
+
+func (r *Room) BuildStatusMessage() Message {
+	data := make(map[string]interface{})
+	data["user_list"] = r.GetUserList()
+	data["room_name"] = r.id
+
+	return Message{
+		EventName: TYPE_STATUS,
+		Data: data,
 	}
 }
 
@@ -154,14 +154,7 @@ func (r *Room) SendStatus() {
 	}
 
 	r.statusTimer = time.AfterFunc(1*time.Second, func() {
-		list := r.GetUserList()
-
-		m := Message{
-			MessageType: TYPE_STATUS,
-			UserList:    list,
-			RoomName:    r.id,
-		}
-
+		m := r.BuildStatusMessage()
 		log.Printf("[%v] current users: %v\n", r.id, len(r.users))
 		r.SendToUsers(m)
 
