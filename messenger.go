@@ -11,14 +11,20 @@ import (
 )
 
 const (
-	TYPE_STATUS = "status"
-	TYPE_TEXT   = "text"
+	TYPE_COMMAND = "command"
 	TYPE_EVENT  = "event"
 )
 
 type Message struct {
-	EventName   string `json:"event_name,omitempty"`
+	Room        string `json:"room,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Name        string `json:"name,omitempty"`
 	Data	    map[string]interface{} `json:"data,omitempty"`
+}
+
+type RoomRequest struct {
+	User *User
+	RoomName string
 }
 
 // User
@@ -31,8 +37,7 @@ type User struct {
 	join      chan *Room
 	die       chan bool
 	name      string
-	room_name string
-	room      *Room
+	rooms     map[string]*Room
 }
 
 func (u *User) Run() {
@@ -45,17 +50,44 @@ func (u *User) Run() {
 		select {
 
 		case room := <-u.join:
-			u.room = room
-			u.room.register <- u
+			u.rooms[room.id] = room
+			room.register <- u
 
 		case <-u.die:
-			log.Print("user die.")
-			u.room.unregister <- u
+			log.Print("user die signal.")
+
+			for _, room := range u.rooms {
+				room.unregister <- u
+			}
+
 			log.Print("user unregister from die.")
 			return
 
 		case message := <-u.read:
-			u.room.broadcast <- message
+			room := u.rooms[message.Room]
+
+			if message.Type == TYPE_COMMAND {
+				switch message.Name {
+				case "join":
+					if room == nil {
+						r := &RoomRequest{
+							User: u,
+							RoomName: message.Room,
+						}
+
+						go func(){ h.join <- r }()
+					}
+
+				case "part":
+					if room != nil {
+						u.rooms[message.Room].unregister <- u
+					}
+				}
+			} else {
+				if room != nil {
+					room.broadcast <- message
+				}
+			}
 
 		case message := <-u.send:
 			log.Printf("[%v] got message: %v", u.name, message)
@@ -129,10 +161,11 @@ func (r *Room) Run(h *Hub) {
 func (r *Room) BuildStatusMessage() Message {
 	data := make(map[string]interface{})
 	data["user_list"] = r.GetUserList()
-	data["room_name"] = r.id
 
 	return Message{
-		EventName: TYPE_STATUS,
+		Type: TYPE_EVENT,
+		Name: "status",
+		Room: r.id,
 		Data: data,
 	}
 }
@@ -176,7 +209,7 @@ func (r *Room) SendToUsers(m Message) {
 type Hub struct {
 	rooms      map[string]*Room
 	unregister chan *Room
-	join       chan *User
+	join       chan *RoomRequest
 	updates    chan Message
 }
 
@@ -188,15 +221,16 @@ func (h *Hub) Run() {
 		case room := <-h.unregister:
 			delete(h.rooms, room.id)
 
-		case user := <-h.join:
-			room := h.rooms[user.room_name]
+		case request := <-h.join:
+			room := h.rooms[request.RoomName]
 			if room == nil {
-				room = h.CreateRoom(user.room_name, true)
+				room = h.CreateRoom(request.RoomName, true)
 			}
 
-			user.join <- room
-			if user.room_name == "global" {
-				go h.GetCurrentStatus(user.send)
+			request.User.join <- room
+
+			if request.RoomName == "global" {
+				go h.GetCurrentStatus(request.User.send)
 			}
 
 		case message := <-h.updates:
@@ -232,18 +266,13 @@ func (h *Hub) CreateRoom(name string, autoclose bool) *Room {
 var h = Hub{
 	rooms:      make(map[string]*Room),
 	unregister: make(chan *Room),
-	join:       make(chan *User),
+	join:       make(chan *RoomRequest),
 	updates:    make(chan Message),
 }
 
 func DoorMan(ws *websocket.Conn) {
 	ws.Request().ParseForm()
-	room_name := ws.Request().Form.Get("name")
 	user_name := ws.Request().Form.Get("user_name")
-
-	if len(room_name) == 0 {
-		return
-	}
 
 	user := &User{
 		websocket: ws,
@@ -252,13 +281,10 @@ func DoorMan(ws *websocket.Conn) {
 		die:       make(chan bool),
 		join:      make(chan *Room),
 		name:      user_name,
-		room_name: room_name,
+		rooms:     make(map[string]*Room),
 	}
 
-	h.join <- user
-
 	user.Run() // blocks until websocket is closed
-
 	log.Print("DoorMan close")
 }
 
