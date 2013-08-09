@@ -6,8 +6,9 @@ import (
 	"runtime"
 	"time"
 
-	"code.google.com/p/go.net/websocket"
+	// "code.google.com/p/go.net/websocket"
 	// "code.google.com/p/go-sqlite/go1/sqlite3"
+	"github.com/garyburd/go-websocket/websocket"
 )
 
 const (
@@ -16,8 +17,8 @@ const (
 )
 
 type Message struct {
-	Room        string `json:"room,omitempty"`
 	Type        string `json:"type,omitempty"`
+	Room        string `json:"room,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Data	    map[string]interface{} `json:"data,omitempty"`
 }
@@ -129,6 +130,7 @@ type Room struct {
 	unregister  chan *User
 	statusTimer *time.Timer
 	autoclose   bool
+	// announce    <-chan time.Time
 }
 
 func (r *Room) Run(h *Hub) {
@@ -254,6 +256,7 @@ func (h *Hub) CreateRoom(name string, autoclose bool) *Room {
 		unregister: make(chan *User),
 		status:     make(chan chan Message),
 		autoclose:  autoclose,
+		// announce:   time.Tick(15 * time.Second),
 	}
 
 	log.Printf("[hub] created room: %v", room.id)
