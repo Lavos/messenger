@@ -21,6 +21,7 @@ type Message struct {
 	Room        string `json:"room,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Data	    map[string]interface{} `json:"data,omitempty"`
+	User	    *User `json:"user,omitempty"`
 }
 
 type RoomRequest struct {
@@ -45,13 +46,15 @@ func DoorMan(w http.ResponseWriter, r *http.Request) {
 
 	r.ParseForm()
 	user_name := r.Form.Get("user_name")
+	user_id := r.Form.Get("user_id")
 
 	user := &User{
 		websocket: ws,
-		send:      make(chan Message),
+		send:      make(chan Message, 24),
 		die:       make(chan bool),
 		join:      make(chan *Room),
-		name:      user_name,
+		Name:      user_name,
+		Id:	   user_id,
 		rooms:     make(map[string]*Room),
 	}
 

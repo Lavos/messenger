@@ -14,7 +14,6 @@ type Room struct {
 	unregister  chan *User
 	statusTimer *time.Timer
 	autoclose   bool
-	// announce    <-chan time.Time
 }
 
 func (r *Room) Run(h *Hub) {
@@ -60,7 +59,7 @@ func (r *Room) GetUserList() []string {
 	list := make([]string, 0, len(r.users))
 
 	for user, _ := range r.users {
-		list = append(list, user.name)
+		list = append(list, user.Name)
 	}
 
 	return list

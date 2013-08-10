@@ -27,7 +27,8 @@ type User struct {
 	send      chan Message
 	join      chan *Room
 	die       chan bool
-	name      string
+	Name      string `json:"name"`
+	Id	  string `json:"id"`
 	rooms     map[string]*Room
 }
 
@@ -52,16 +53,16 @@ func (u *User) Run() {
 			log.Print("user die signal.")
 
 			for _, room := range u.rooms {
-				log.Printf("[%v] attempting to unregister from: [%v]", u.name, room.id)
+				log.Printf("[%v] attempting to unregister from: [%v]", u.Name, room.id)
 				room.unregister <- u
-				log.Printf("[%v] unregister success from: [%v]", u.name, room.id)
+				log.Printf("[%v] unregister success from: [%v]", u.Name, room.id)
 			}
 
 			log.Print("user unregister from die.")
 			return
 
 		case message := <-u.send:
-			log.Printf("[%v] sending to client message: %v", u.name, message)
+			log.Printf("[%v] sending to client message: %v", u.Name, message)
 			b, err := json.Marshal(message)
 
 			if err != nil {
@@ -76,7 +77,7 @@ func (u *User) Run() {
 
 		case <-ticker.C:
 			if err := u.Write(websocket.OpPing, []byte{}); err != nil {
-				log.Printf("[%v] ping failed, closing.", u.name)
+				log.Printf("[%v] ping failed, closing.", u.Name)
 				return
 			}
 		}
@@ -92,7 +93,7 @@ func (u *User) Reader() {
 	for {
 		op, r, err := u.websocket.NextReader()
 		if err != nil {
-			log.Printf("[%v] got a misformed JSON message from browser, or websocket close.", u.name)
+			log.Printf("[%v] got a misformed JSON message from browser, or websocket close.", u.Name)
 			break
 		}
 
@@ -128,14 +129,15 @@ func (u *User) Reader() {
 
 				case "part":
 					if room != nil {
-						log.Printf("[%v] attempting to unregister from: [%v]", u.name, room.id)
+						log.Printf("[%v] attempting to unregister from: [%v]", u.Name, room.id)
 						u.rooms[m.Room].unregister <- u
-						log.Printf("[%v] unregister success from: [%v]", u.name, room.id)
+						log.Printf("[%v] unregister success from: [%v]", u.Name, room.id)
 						delete(u.rooms, m.Room)
 					}
 				}
 			} else {
-				if room != nil {
+				if room != nil && m.Type == TYPE_EVENT  {
+					m.User = u
 					room.broadcast <- m
 				}
 			}
