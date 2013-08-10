@@ -52,7 +52,6 @@ func (h *Hub) CreateRoom(name string, autoclose bool) *Room {
 		unregister: make(chan *User),
 		status:     make(chan chan Message),
 		autoclose:  autoclose,
-		// announce:   time.Tick(15 * time.Second),
 	}
 
 	log.Printf("[hub] created room: %v", room.id)
