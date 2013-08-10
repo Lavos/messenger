@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
-	"io/ioutil"
-	"github.com/garyburd/go-websocket/websocket"
 	"encoding/json"
+	"github.com/garyburd/go-websocket/websocket"
+	"io/ioutil"
+	"log"
 	"time"
 )
 
@@ -28,7 +28,7 @@ type User struct {
 	join      chan *Room
 	die       chan bool
 	Name      string `json:"name"`
-	Id	  string `json:"id"`
+	Id        string `json:"id"`
 	rooms     map[string]*Room
 }
 
@@ -120,7 +120,7 @@ func (u *User) Reader() {
 				case "join":
 					if room == nil {
 						r := &RoomRequest{
-							User: u,
+							User:     u,
 							RoomName: m.Room,
 						}
 
@@ -136,7 +136,7 @@ func (u *User) Reader() {
 					}
 				}
 			} else {
-				if room != nil && m.Type == TYPE_EVENT  {
+				if room != nil && m.Type == TYPE_EVENT {
 					m.User = u
 					room.broadcast <- m
 				}

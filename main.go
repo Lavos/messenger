@@ -13,19 +13,19 @@ import (
 
 const (
 	TYPE_COMMAND = "command"
-	TYPE_EVENT  = "event"
+	TYPE_EVENT   = "event"
 )
 
 type Message struct {
-	Type        string `json:"type,omitempty"`
-	Room        string `json:"room,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Data	    map[string]interface{} `json:"data,omitempty"`
-	User	    *User `json:"user,omitempty"`
+	Type string                 `json:"type,omitempty"`
+	Room string                 `json:"room,omitempty"`
+	Name string                 `json:"name,omitempty"`
+	Data map[string]interface{} `json:"data,omitempty"`
+	User *User                  `json:"user,omitempty"`
 }
 
 type RoomRequest struct {
-	User *User
+	User     *User
 	RoomName string
 }
 
@@ -54,7 +54,7 @@ func DoorMan(w http.ResponseWriter, r *http.Request) {
 		die:       make(chan bool),
 		join:      make(chan *Room),
 		Name:      user_name,
-		Id:	   user_id,
+		Id:        user_id,
 		rooms:     make(map[string]*Room),
 	}
 

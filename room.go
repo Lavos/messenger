@@ -88,4 +88,3 @@ func (r *Room) SendToUsers(m Message) {
 		}
 	}
 }
-
