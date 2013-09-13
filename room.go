@@ -74,9 +74,9 @@ func (r *Room) Run(h *Hub) {
 		case returnchan := <-r.log:
 			m := Message{
 				Type: TYPE_EVENT,
-				Name: 'log',
+				Name: "log",
 				Room: r.id,
-				Data: r.chatlog.Get()
+				Data: r.chatlog.Get(),
 			}
 
 			returnchan <- m
