@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
-	"time"
+	// "time"
 
 	// "code.google.com/p/go.net/websocket"
 	// "code.google.com/p/go-sqlite/go1/sqlite3"
@@ -21,7 +21,10 @@ type Message struct {
 	Room string                 `json:"room,omitempty"`
 	Name string                 `json:"name,omitempty"`
 	Data map[string]interface{} `json:"data,omitempty"`
-	User *User                  `json:"user,omitempty"`
+	User struct {
+		Name      string `json:"name"`
+		Id        string `json:"id"`
+	} `json:"user,omitempty"`
 }
 
 type RoomRequest struct {
@@ -70,12 +73,12 @@ func main() {
 
 	log.Print("Started Server.")
 
-	go func() {
+	/* go func() {
 		c := time.Tick(5 * time.Second)
 		for now := range c {
 			log.Printf("- %v - go routines: %v", now, runtime.NumGoroutine())
 		}
-	}()
+	}() */
 
 	if err := http.ListenAndServe(":12345", nil); err != nil {
 		panic("ListenAndServe: " + err.Error())

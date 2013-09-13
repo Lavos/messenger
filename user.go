@@ -134,10 +134,20 @@ func (u *User) Reader() {
 						log.Printf("[%v] unregister success from: [%v]", u.Name, room.id)
 						delete(u.rooms, m.Room)
 					}
+
+				case "log":
+					if room != nil {
+						u.rooms[m.Room].log <- u.send
+					}
+				case "history":
+					if room != nil {
+						u.rooms[m.Room].history <- u.send
+					}
 				}
 			} else {
 				if room != nil && m.Type == TYPE_EVENT {
-					m.User = u
+					m.User.Name = u.Name
+					m.User.Id = u.Id
 					room.broadcast <- m
 				}
 			}

@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 	"time"
+	"github.com/Lavos/bucket"
+	"code.google.com/p/go-sqlite/go1/sqlite3"
+	"encoding/json"
 )
 
 type Room struct {
@@ -12,12 +15,18 @@ type Room struct {
 	status      chan chan Message
 	register    chan *User
 	unregister  chan *User
+	history     chan chan Message
+	log	    chan chan Message
+	chatlog	    *bucket.Bucket
 	statusTimer *time.Timer
 	autoclose   bool
 }
 
 func (r *Room) Run(h *Hub) {
 	defer log.Printf("[%v] Room run close.", r.id)
+
+	conn, _ := sqlite3.Open("messages.db")
+	defer conn.Close()
 
 	for {
 		select {
@@ -35,10 +44,46 @@ func (r *Room) Run(h *Hub) {
 			}
 		case message := <-r.broadcast:
 			r.SendToUsers(message)
+
+			if message.Type == TYPE_EVENT {
+				r.chatlog.Bump(message)
+
+				b, _ := json.Marshal(message.Data)
+
+				args := sqlite3.NamedArgs{
+					"$type": message.Type,
+					"$room": message.Room,
+					"$name": message.Name,
+					"$data": b,
+					"$username": message.User.Name,
+					"$id": message.User.Id,
+				}
+
+				log.Printf("args: %v", args)
+
+				insert_err := conn.Exec("INSERT INTO messages (type, room, name, data, username, id) VALUES ($type, $room, $name, $data, $username, $id);", args)
+				if insert_err != nil {
+					log.Printf("insert_err: %v", insert_err)
+				}
+				conn.Commit()
+			}
 		case returnchan := <-r.status:
 			m := r.BuildStatusMessage()
 			log.Printf("requested status: %v", m)
 			returnchan <- m
+		case returnchan := <-r.log:
+			m := Message{
+				Type: TYPE_EVENT,
+				Name: 'log',
+				Room: r.id,
+				Data: r.chatlog.Get()
+			}
+
+			returnchan <- m
+		case returnchan := <-r.history:
+			for _, m := range r.chatlog.Get() {
+				returnchan <- m.(Message)
+			}
 		}
 	}
 }

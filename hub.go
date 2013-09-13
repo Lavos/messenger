@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"github.com/Lavos/bucket"
 )
 
 type Hub struct {
@@ -51,10 +52,14 @@ func (h *Hub) CreateRoom(name string, autoclose bool) *Room {
 		register:   make(chan *User),
 		unregister: make(chan *User),
 		status:     make(chan chan Message),
+		history:    make(chan chan Message),
+		log:	    make(chan chan Message),
+		chatlog:    bucket.NewBucket(50),
 		autoclose:  autoclose,
 	}
 
 	log.Printf("[hub] created room: %v", room.id)
+	log.Printf("[hub] %v", room)
 
 	h.rooms[room.id] = room
 	go room.Run(h)
