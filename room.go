@@ -46,7 +46,9 @@ func (r *Room) Run(h *Hub) {
 			r.SendToUsers(message)
 
 			if message.Type == TYPE_EVENT {
-				r.chatlog.Bump(message)
+				if message.Name == 'text' {
+					r.chatlog.Bump(message)
+				}
 
 				b, _ := json.Marshal(message.Data)
 
@@ -72,12 +74,17 @@ func (r *Room) Run(h *Hub) {
 			log.Printf("requested status: %v", m)
 			returnchan <- m
 		case returnchan := <-r.log:
+			data := make(map[string]interface{});
+			data["messages"] = r.chatlog.Get()
+
 			m := Message{
 				Type: TYPE_EVENT,
 				Name: "log",
 				Room: r.id,
-				Data: r.chatlog.Get(),
+				Data: data,
 			}
+
+			log.Printf("log message: %v", m)
 
 			returnchan <- m
 		case returnchan := <-r.history:

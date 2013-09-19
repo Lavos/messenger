@@ -4,10 +4,6 @@ import (
 	"log"
 	"net/http"
 	"runtime"
-	// "time"
-
-	// "code.google.com/p/go.net/websocket"
-	// "code.google.com/p/go-sqlite/go1/sqlite3"
 	"github.com/garyburd/go-websocket/websocket"
 )
 
