@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/garyburd/go-websocket/websocket"
+	"code.google.com/p/go-sqlite/go1/sqlite3"
 	"io/ioutil"
 	"log"
 	"time"
@@ -135,13 +136,53 @@ func (u *User) Reader() {
 						delete(u.rooms, m.Room)
 					}
 
-				case "log":
-					if room != nil {
-						u.rooms[m.Room].log <- u.send
-					}
 				case "history":
 					if room != nil {
-						u.rooms[m.Room].history <- u.send
+						conn, _ := sqlite3.Open("messages.db")
+						defer conn.Close()
+
+						data := make(map[string]interface{})
+						messages := make([]Message, 0)
+
+						args := sqlite3.NamedArgs{
+							"$room": m.Room,
+							"$limit": m.Data["limit"],
+							"$offset": m.Data["offset"],
+						}
+						sql := "SELECT rowid, * FROM messages WHERE room = $room AND name = 'text' LIMIT $limit OFFSET $offset"
+						row := make(sqlite3.RowMap)
+
+						for s, err := conn.Query(sql, args); err == nil; err = s.Next() {
+							var rowid int64
+							s.Scan(&rowid, row)
+
+							var data map[string]interface{}
+							json.Unmarshal(row["data"].([]byte), &data)
+
+							message := Message{
+								Type: row["type"].(string),
+								Room: row["room"].(string),
+								Name: row["name"].(string),
+								Data: data,
+							}
+
+							message.User.Name = row["username"].(string)
+							message.User.Id = row["id"].(string)
+
+							messages = append(messages, message)
+						}
+
+						data["messages"] = messages
+
+						new_m := Message{
+							Type: TYPE_EVENT,
+							Name: "history",
+							Room: "bananas",
+							Data: data,
+						}
+
+						log.Printf("log message: %v", new_m)
+						u.send <- new_m
 					}
 				}
 			} else {

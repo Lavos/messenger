@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"time"
-	"github.com/Lavos/bucket"
 	"code.google.com/p/go-sqlite/go1/sqlite3"
 	"encoding/json"
 )
@@ -15,9 +14,6 @@ type Room struct {
 	status      chan chan Message
 	register    chan *User
 	unregister  chan *User
-	history     chan chan Message
-	log	    chan chan Message
-	chatlog	    *bucket.Bucket
 	statusTimer *time.Timer
 	autoclose   bool
 }
@@ -46,10 +42,6 @@ func (r *Room) Run(h *Hub) {
 			r.SendToUsers(message)
 
 			if message.Type == TYPE_EVENT {
-				if message.Name == 'text' {
-					r.chatlog.Bump(message)
-				}
-
 				b, _ := json.Marshal(message.Data)
 
 				args := sqlite3.NamedArgs{
@@ -73,24 +65,6 @@ func (r *Room) Run(h *Hub) {
 			m := r.BuildStatusMessage()
 			log.Printf("requested status: %v", m)
 			returnchan <- m
-		case returnchan := <-r.log:
-			data := make(map[string]interface{});
-			data["messages"] = r.chatlog.Get()
-
-			m := Message{
-				Type: TYPE_EVENT,
-				Name: "log",
-				Room: r.id,
-				Data: data,
-			}
-
-			log.Printf("log message: %v", m)
-
-			returnchan <- m
-		case returnchan := <-r.history:
-			for _, m := range r.chatlog.Get() {
-				returnchan <- m.(Message)
-			}
 		}
 	}
 }
