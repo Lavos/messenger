@@ -137,7 +137,7 @@ func (u *User) Reader() {
 					}
 
 				case "history":
-					if room != nil {
+					if m.Room != "" {
 						conn, _ := sqlite3.Open("messages.db")
 						defer conn.Close()
 
@@ -177,7 +177,7 @@ func (u *User) Reader() {
 						new_m := Message{
 							Type: TYPE_EVENT,
 							Name: "history",
-							Room: "bananas",
+							Room: m.Room,
 							Data: data,
 						}
 
