@@ -174,6 +174,13 @@ func (u *User) Reader() {
 
 						data["messages"] = messages
 
+						// get total
+						var total int
+						total_statement, _ := conn.Query("SELECT count(rowid) FROM messages WHERE room = $room AND name = 'text'", args)
+						total_statement.Scan(&total);
+
+						data["total"] = total
+
 						new_m := Message{
 							Type: TYPE_EVENT,
 							Name: "history",
