@@ -149,7 +149,7 @@ func (u *User) Reader() {
 							"$limit": m.Data["limit"],
 							"$offset": m.Data["offset"],
 						}
-						sql := "SELECT rowid, * FROM messages WHERE room = $room AND name = 'text' LIMIT $limit OFFSET $offset"
+						sql := "SELECT rowid, * FROM messages WHERE room = $room AND name = 'text' ORDER BY rowid DESC LIMIT $limit OFFSET $offset"
 						row := make(sqlite3.RowMap)
 
 						for s, err := conn.Query(sql, args); err == nil; err = s.Next() {
