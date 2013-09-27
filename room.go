@@ -21,9 +21,6 @@ type Room struct {
 func (r *Room) Run(h *Hub) {
 	defer log.Printf("[%v] Room run close.", r.id)
 
-	conn, _ := sqlite3.Open("messages.db")
-	defer conn.Close()
-
 	for {
 		select {
 		case user := <-r.register:
@@ -44,6 +41,8 @@ func (r *Room) Run(h *Hub) {
 			if message.Type == TYPE_EVENT {
 				b, _ := json.Marshal(message.Data)
 
+				conn, _ := sqlite3.Open("messages.db")
+
 				args := sqlite3.NamedArgs{
 					"$type": message.Type,
 					"$room": message.Room,
@@ -60,6 +59,7 @@ func (r *Room) Run(h *Hub) {
 					log.Printf("insert_err: %v", insert_err)
 				}
 				conn.Commit()
+				conn.Close()
 			}
 		case returnchan := <-r.status:
 			m := r.BuildStatusMessage()

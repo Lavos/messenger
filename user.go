@@ -139,7 +139,6 @@ func (u *User) Reader() {
 				case "history":
 					if m.Room != "" {
 						conn, _ := sqlite3.Open("messages.db")
-						defer conn.Close()
 
 						data := make(map[string]interface{})
 						messages := make([]Message, 0)
@@ -178,6 +177,8 @@ func (u *User) Reader() {
 						var total int
 						total_statement, _ := conn.Query("SELECT count(rowid) FROM messages WHERE room = $room AND name = 'text'", args)
 						total_statement.Scan(&total);
+
+						conn.Close()
 
 						data["total"] = total
 
